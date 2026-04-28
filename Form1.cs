@@ -5,30 +5,34 @@ namespace PatientEligibilityTranslator
     public partial class Form1 : Form
     {
         private string _currentFilePath = string.Empty;
+        private AppSettings _appSettings;
         private EDI270Translator _edi270Translator;
 
         public Form1()
         {
             InitializeComponent();
+            LoadSettings();
             InitializeTranslator();
+        }
+
+        private void LoadSettings()
+        {
+            _appSettings = AppSettings.Load();
         }
 
         private void InitializeTranslator()
         {
             _edi270Translator = new EDI270Translator
             {
-                SinglePatientPerRequest = chkSinglePatient.Checked,
-                MaxPatientsPerBatch = GetMaxPatientValue()
+                SinglePatientPerRequest = _appSettings.SinglePatientPerRequest,
+                MaxPatientsPerBatch = _appSettings.MaxPatientsPerBatch
             };
         }
 
-        private int GetMaxPatientValue()
+        private void UpdateTranslatorSettings()
         {
-            if (int.TryParse(txtMaxPatients.Text, out int value) && value > 0)
-            {
-                return value;
-            }
-            return 50;
+            _edi270Translator.SinglePatientPerRequest = _appSettings.SinglePatientPerRequest;
+            _edi270Translator.MaxPatientsPerBatch = _appSettings.MaxPatientsPerBatch;
         }
 
         private void BtnSelectFile_Click(object sender, EventArgs e)
@@ -94,31 +98,18 @@ namespace PatientEligibilityTranslator
             }
         }
 
-        private void ChkSinglePatient_CheckedChanged(object sender, EventArgs e)
+        private void BtnSettings_Click(object sender, EventArgs e)
         {
-            txtMaxPatients.Enabled = !chkSinglePatient.Checked;
-            lblMaxPatients.Enabled = !chkSinglePatient.Checked;
-        }
-
-        private void UpdateTranslatorSettings()
-        {
-            _edi270Translator.SinglePatientPerRequest = chkSinglePatient.Checked;
-            _edi270Translator.MaxPatientsPerBatch = GetMaxPatientValue();
-        }
-
-        private void TxtMaxPatients_Validating(object sender, System.ComponentModel.CancelEventArgs e)
-        {
-            if (!int.TryParse(txtMaxPatients.Text, out int value) || value <= 0)
+            using (var settingsForm = new SettingsForm(_appSettings.SinglePatientPerRequest, _appSettings.MaxPatientsPerBatch))
             {
-                e.Cancel = true;
-                txtMaxPatients.BackColor = System.Drawing.Color.LightCoral;
-                errorProvider.SetError(txtMaxPatients, "Must be a positive integer");
-            }
-            else
-            {
-                e.Cancel = false;
-                txtMaxPatients.BackColor = System.Drawing.SystemColors.Window;
-                errorProvider.SetError(txtMaxPatients, "");
+                if (settingsForm.ShowDialog(this) == DialogResult.OK)
+                {
+                    _appSettings.SinglePatientPerRequest = settingsForm.SinglePatientPerRequest;
+                    _appSettings.MaxPatientsPerBatch = settingsForm.MaxPatientsPerBatch;
+                    _appSettings.Save();
+                    UpdateTranslatorSettings();
+                    MessageBox.Show("Settings saved successfully.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
             }
         }
     }
