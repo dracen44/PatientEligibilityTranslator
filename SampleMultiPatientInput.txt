@@ -1,0 +1,24 @@
+FirstName: John
+LastName: Doe
+MemberId: 123456
+GroupId: GRP001
+DOB: 01/15/1990
+PlanHolder: Acme Corp
+
+---PATIENT---
+
+FirstName: Jane
+LastName: Smith
+MemberId: 123457
+GroupId: GRP001
+DOB: 05/22/1988
+PlanHolder: Acme Corp
+
+---PATIENT---
+
+FirstName: Robert
+LastName: Johnson
+MemberId: 123458
+GroupId: GRP001
+DOB: 03/10/1985
+PlanHolder: Acme Corp

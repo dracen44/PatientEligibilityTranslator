@@ -5,10 +5,30 @@ namespace PatientEligibilityTranslator
     public partial class Form1 : Form
     {
         private string _currentFilePath = string.Empty;
+        private EDI270Translator _edi270Translator;
 
         public Form1()
         {
             InitializeComponent();
+            InitializeTranslator();
+        }
+
+        private void InitializeTranslator()
+        {
+            _edi270Translator = new EDI270Translator
+            {
+                SinglePatientPerRequest = chkSinglePatient.Checked,
+                MaxPatientsPerBatch = GetMaxPatientValue()
+            };
+        }
+
+        private int GetMaxPatientValue()
+        {
+            if (int.TryParse(txtMaxPatients.Text, out int value) && value > 0)
+            {
+                return value;
+            }
+            return 50;
         }
 
         private void BtnSelectFile_Click(object sender, EventArgs e)
@@ -42,9 +62,9 @@ namespace PatientEligibilityTranslator
                     return;
                 }
 
+                UpdateTranslatorSettings();
                 string inputData = txtInput.Text;
-                var translator = new EDI270Translator();
-                string edi270 = translator.Translate(inputData);
+                string edi270 = _edi270Translator.Translate(inputData);
                 txtOutput.Text = edi270;
             }
             catch (Exception ex)
@@ -71,6 +91,34 @@ namespace PatientEligibilityTranslator
             catch (Exception ex)
             {
                 MessageBox.Show($"Error translating 271: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void ChkSinglePatient_CheckedChanged(object sender, EventArgs e)
+        {
+            txtMaxPatients.Enabled = !chkSinglePatient.Checked;
+            lblMaxPatients.Enabled = !chkSinglePatient.Checked;
+        }
+
+        private void UpdateTranslatorSettings()
+        {
+            _edi270Translator.SinglePatientPerRequest = chkSinglePatient.Checked;
+            _edi270Translator.MaxPatientsPerBatch = GetMaxPatientValue();
+        }
+
+        private void TxtMaxPatients_Validating(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (!int.TryParse(txtMaxPatients.Text, out int value) || value <= 0)
+            {
+                e.Cancel = true;
+                txtMaxPatients.BackColor = System.Drawing.Color.LightCoral;
+                errorProvider.SetError(txtMaxPatients, "Must be a positive integer");
+            }
+            else
+            {
+                e.Cancel = false;
+                txtMaxPatients.BackColor = System.Drawing.SystemColors.Window;
+                errorProvider.SetError(txtMaxPatients, "");
             }
         }
     }

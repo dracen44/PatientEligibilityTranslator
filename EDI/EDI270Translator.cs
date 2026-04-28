@@ -5,16 +5,80 @@ namespace PatientEligibilityTranslator.EDI
         private const string Separator = "~";
         private const string ElementSeparator = "*";
         private const string SegmentTerminator = "~";
+        private const string PatientDelimiter = "---PATIENT---";
+
+        public bool SinglePatientPerRequest { get; set; } = false;
+        public int MaxPatientsPerBatch { get; set; } = 50;
 
         public string Translate(string inputData)
         {
-            var patientInfo = ParseInput(inputData);
-            return BuildEDI270(patientInfo);
+            var patients = ParseMultiplePatients(inputData);
+            if (patients.Count == 0)
+                return string.Empty;
+
+            if (SinglePatientPerRequest)
+            {
+                return GenerateSinglePatientBatches(patients);
+            }
+            else
+            {
+                return GenerateMultiPatientBatches(patients);
+            }
         }
 
-        private PatientInfo ParseInput(string inputData)
+        private string GenerateSinglePatientBatches(List<PatientInfo> patients)
         {
-            var lines = inputData.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+            var sb = new System.Text.StringBuilder();
+
+            foreach (var patient in patients)
+            {
+                var singlePatientList = new List<PatientInfo> { patient };
+                string batch = BuildEDI270Batch(singlePatientList, interchangeNumber: patients.IndexOf(patient) + 1);
+                sb.Append(batch);
+            }
+
+            return sb.ToString();
+        }
+
+        private string GenerateMultiPatientBatches(List<PatientInfo> patients)
+        {
+            var sb = new System.Text.StringBuilder();
+            int batchNumber = 1;
+
+            for (int i = 0; i < patients.Count; i += MaxPatientsPerBatch)
+            {
+                int remainingCount = Math.Min(MaxPatientsPerBatch, patients.Count - i);
+                var batchPatients = patients.GetRange(i, remainingCount);
+                string batch = BuildEDI270Batch(batchPatients, interchangeNumber: batchNumber);
+                sb.Append(batch);
+                batchNumber++;
+            }
+
+            return sb.ToString();
+        }
+
+        private List<PatientInfo> ParseMultiplePatients(string inputData)
+        {
+            var patients = new List<PatientInfo>();
+
+            // Split by patient delimiter or by blank lines
+            string[] patientSections = inputData.Split(new[] { PatientDelimiter }, StringSplitOptions.None);
+
+            foreach (var section in patientSections)
+            {
+                var patient = ParsePatientSection(section);
+                if (!string.IsNullOrEmpty(patient.MemberId) || !string.IsNullOrEmpty(patient.FirstName))
+                {
+                    patients.Add(patient);
+                }
+            }
+
+            return patients;
+        }
+
+        private PatientInfo ParsePatientSection(string sectionData)
+        {
+            var lines = sectionData.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
             var info = new PatientInfo();
 
             foreach (var line in lines)
@@ -55,58 +119,81 @@ namespace PatientEligibilityTranslator.EDI
             return info;
         }
 
-        private string BuildEDI270(PatientInfo info)
+        private string BuildEDI270Batch(List<PatientInfo> patients, int interchangeNumber = 1)
         {
             var sb = new System.Text.StringBuilder();
+            string timestamp = DateTime.Now.ToString("yyMMdd");
+            string timeValue = DateTime.Now.ToString("HHmm");
 
             // ISA Segment (Interchange Control Header)
-            sb.Append("ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *200101*0000*U*00401*000000001*0*P*:" + SegmentTerminator);
+            sb.Append($"ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *{timestamp}*{timeValue}*U*00401*{interchangeNumber:D9}*0*P*:" + SegmentTerminator);
 
             // GS Segment (Functional Group Header)
-            sb.Append("GS*HS*APP SENDER*APP RECEIVER*20200101*000000*1*X*004010" + SegmentTerminator);
+            sb.Append($"GS*HS*APP SENDER*APP RECEIVER*{timestamp}*{timeValue.Substring(0, 4)}*1*X*004010" + SegmentTerminator);
 
-            // ST Segment (Transaction Set Header)
-            sb.Append("ST*270*0001*005010X222" + SegmentTerminator);
+            int transactionCount = 0;
+            int segmentCount = 0;
 
-            // BHT Segment (Beginning of Hierarchical Transaction)
-            sb.Append("BHT*0019*13*244*20200101*0000*CH" + SegmentTerminator);
-
-            // HL Segment (Hierarchical Level - Subscriber)
-            sb.Append("HL*1**40*1" + SegmentTerminator);
-
-            // NM1 Segment (Subscriber Name)
-            sb.Append($"NM1*IL*1*{info.LastName}*{info.FirstName}****MI*{info.MemberId}" + SegmentTerminator);
-
-            // DMG Segment (Subscriber Demographic Information)
-            if (!string.IsNullOrEmpty(info.DateOfBirth))
+            foreach (int index in Enumerable.Range(0, patients.Count))
             {
-                string dob = CleanDate(info.DateOfBirth);
-                sb.Append($"DMG*D8*{dob}*M" + SegmentTerminator);
+                var patient = patients[index];
+                transactionCount++;
+
+                // ST Segment (Transaction Set Header)
+                string transactionNum = (index + 1).ToString("D4");
+                sb.Append($"ST*270*{transactionNum}*005010X222" + SegmentTerminator);
+                segmentCount += 1;
+
+                // BHT Segment (Beginning of Hierarchical Transaction)
+                sb.Append($"BHT*0019*13*{transactionNum}*{timestamp}*{timeValue}*CH" + SegmentTerminator);
+                segmentCount += 1;
+
+                // HL Segment (Hierarchical Level - Subscriber)
+                sb.Append("HL*1**40*1" + SegmentTerminator);
+                segmentCount += 1;
+
+                // NM1 Segment (Subscriber Name)
+                sb.Append($"NM1*IL*1*{patient.LastName}*{patient.FirstName}****MI*{patient.MemberId}" + SegmentTerminator);
+                segmentCount += 1;
+
+                // DMG Segment (Subscriber Demographic Information)
+                if (!string.IsNullOrEmpty(patient.DateOfBirth))
+                {
+                    string dob = CleanDate(patient.DateOfBirth);
+                    sb.Append($"DMG*D8*{dob}*M" + SegmentTerminator);
+                    segmentCount += 1;
+                }
+
+                // NM1 Segment (Responsible Party/Plan Holder)
+                if (!string.IsNullOrEmpty(patient.PlanHolder))
+                {
+                    sb.Append($"NM1*PR*2*{patient.PlanHolder}****HR*{patient.GroupId}" + SegmentTerminator);
+                    segmentCount += 1;
+                }
+
+                // HL Segment (Hierarchical Level - Dependent/Patient)
+                sb.Append("HL*2*1*23*0" + SegmentTerminator);
+                segmentCount += 1;
+
+                // NM1 Segment (Patient Name)
+                sb.Append($"NM1*IL*1*{patient.LastName}*{patient.FirstName}****MI*{patient.MemberId}" + SegmentTerminator);
+                segmentCount += 1;
+
+                // REF Segment (Service Authorization Exception Code)
+                sb.Append("REF*0F*11" + SegmentTerminator);
+                segmentCount += 1;
+
+                // SE Segment (Transaction Set Trailer)
+                int segmentsInTransaction = segmentCount + 1; // +1 for SE itself
+                sb.Append($"SE*{segmentsInTransaction}*{transactionNum}" + SegmentTerminator);
+                segmentCount = 0;
             }
-
-            // NM1 Segment (Responsible Party/Plan Holder)
-            if (!string.IsNullOrEmpty(info.PlanHolder))
-            {
-                sb.Append($"NM1*PR*2*{info.PlanHolder}****HR*{info.GroupId}" + SegmentTerminator);
-            }
-
-            // HL Segment (Hierarchical Level - Dependent/Patient)
-            sb.Append("HL*2*1*23*0" + SegmentTerminator);
-
-            // NM1 Segment (Patient Name - may be same as subscriber or dependent)
-            sb.Append($"NM1*IL*1*{info.LastName}*{info.FirstName}****MI*{info.MemberId}" + SegmentTerminator);
-
-            // REF Segment (Service Authorization Exception Code)
-            sb.Append("REF*0F*11" + SegmentTerminator);
-
-            // SE Segment (Transaction Set Trailer)
-            sb.Append("SE*13*0001" + SegmentTerminator);
 
             // GE Segment (Functional Group Trailer)
-            sb.Append("GE*1*1" + SegmentTerminator);
+            sb.Append($"GE*{transactionCount}*1" + SegmentTerminator);
 
             // IEA Segment (Interchange Control Trailer)
-            sb.Append("IEA*1*000000001" + SegmentTerminator);
+            sb.Append($"IEA*1*{interchangeNumber:D9}" + SegmentTerminator);
 
             return sb.ToString();
         }
