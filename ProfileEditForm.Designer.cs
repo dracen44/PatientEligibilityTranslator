@@ -26,6 +26,7 @@ namespace PatientEligibilityTranslator
             cbLineDelimiter = new ComboBox();
             txtCustomLineDelimiter = new TextBox();
             chkFirstLineIsHeader = new CheckBox();
+            btnConfigureFieldMappings = new Button();
             btnOK = new Button();
             btnCancel = new Button();
             gbProfileSettings = new GroupBox();
@@ -127,22 +128,32 @@ namespace PatientEligibilityTranslator
             chkFirstLineIsHeader.Text = "First line is header";
             chkFirstLineIsHeader.UseVisualStyleBackColor = true;
             // 
+            // btnConfigureFieldMappings
+            // 
+            btnConfigureFieldMappings.Location = new Point(15, 200);
+            btnConfigureFieldMappings.Name = "btnConfigureFieldMappings";
+            btnConfigureFieldMappings.Size = new Size(220, 23);
+            btnConfigureFieldMappings.TabIndex = 11;
+            btnConfigureFieldMappings.Text = "Configure Field Mappings...";
+            btnConfigureFieldMappings.UseVisualStyleBackColor = true;
+            btnConfigureFieldMappings.Click += BtnConfigureFieldMappings_Click;
+            // 
             // btnOK
             // 
-            btnOK.Location = new Point(216, 295);
+            btnOK.Location = new Point(216, 235);
             btnOK.Name = "btnOK";
             btnOK.Size = new Size(75, 23);
-            btnOK.TabIndex = 11;
+            btnOK.TabIndex = 12;
             btnOK.Text = "OK";
             btnOK.UseVisualStyleBackColor = true;
             btnOK.Click += BtnOK_Click;
             // 
             // btnCancel
             // 
-            btnCancel.Location = new Point(297, 295);
+            btnCancel.Location = new Point(297, 235);
             btnCancel.Name = "btnCancel";
             btnCancel.Size = new Size(75, 23);
-            btnCancel.TabIndex = 12;
+            btnCancel.TabIndex = 13;
             btnCancel.Text = "Cancel";
             btnCancel.UseVisualStyleBackColor = true;
             btnCancel.Click += BtnCancel_Click;
@@ -160,9 +171,10 @@ namespace PatientEligibilityTranslator
             gbProfileSettings.Controls.Add(txtName);
             gbProfileSettings.Controls.Add(lblName);
             gbProfileSettings.Controls.Add(chkFirstLineIsHeader);
+            gbProfileSettings.Controls.Add(btnConfigureFieldMappings);
             gbProfileSettings.Location = new Point(12, 12);
             gbProfileSettings.Name = "gbProfileSettings";
-            gbProfileSettings.Size = new Size(360, 200);
+            gbProfileSettings.Size = new Size(360, 230);
             gbProfileSettings.TabIndex = 0;
             gbProfileSettings.TabStop = false;
             gbProfileSettings.Text = "Profile Settings";
@@ -173,7 +185,7 @@ namespace PatientEligibilityTranslator
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(384, 260);
+            ClientSize = new Size(384, 275);
             Controls.Add(gbProfileSettings);
             Controls.Add(btnOK);
             Controls.Add(btnCancel);
@@ -199,6 +211,7 @@ namespace PatientEligibilityTranslator
         private System.Windows.Forms.ComboBox cbLineDelimiter;
         private System.Windows.Forms.TextBox txtCustomLineDelimiter;
         private System.Windows.Forms.CheckBox chkFirstLineIsHeader;
+        private System.Windows.Forms.Button btnConfigureFieldMappings;
         // removed format/mapping controls
         private System.Windows.Forms.Button btnOK;
         private System.Windows.Forms.Button btnCancel;

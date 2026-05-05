@@ -60,10 +60,16 @@ namespace PatientEligibilityTranslator.EDI
         private List<PatientInfo> ParseMultiplePatients(string inputData)
         {
             var patients = new List<PatientInfo>();
-            
+
+            // CSV mode: header row defines columns, each subsequent line is one patient
+            if (Profile?.FirstLineIsHeader == true)
+            {
+                return ParseCsvPatients(inputData);
+            }
+
             // Use profile if available, otherwise use defaults
             string patientDelimiter = Profile?.PatientDelimiter ?? "---PATIENT---";
-            
+
             // If using line delimiter for patients, convert it first
             if (Profile?.UseLineDelimiterForPatients == true)
             {
@@ -88,6 +94,48 @@ namespace PatientEligibilityTranslator.EDI
             return patients;
         }
 
+        private List<PatientInfo> ParseCsvPatients(string inputData)
+        {
+            var patients = new List<PatientInfo>();
+            string fieldDelimiter = UnescapeString(Profile?.FieldDelimiter ?? ",");
+            string lineDelimiter = UnescapeString(Profile?.LineDelimiter ?? "\\n");
+
+            var lines = inputData.Split(new[] { lineDelimiter }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length < 2)
+                return patients;
+
+            // Build column index → property name map from header row
+            var headerFields = lines[0].Split(new[] { fieldDelimiter }, StringSplitOptions.None);
+            var columnMappings = new Dictionary<int, string>();
+            for (int i = 0; i < headerFields.Length; i++)
+            {
+                string headerFieldName = headerFields[i].Trim().ToLower();
+                columnMappings[i] = Profile?.FieldMappings != null && Profile.FieldMappings.ContainsKey(headerFieldName)
+                    ? Profile.FieldMappings[headerFieldName]
+                    : headerFieldName;
+            }
+
+            // One patient per data row
+            for (int i = 1; i < lines.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i]))
+                    continue;
+
+                var info = new PatientInfo();
+                var fields = lines[i].Split(new[] { fieldDelimiter }, StringSplitOptions.None);
+                for (int colIndex = 0; colIndex < fields.Length; colIndex++)
+                {
+                    if (columnMappings.ContainsKey(colIndex))
+                        SetPatientProperty(ref info, columnMappings[colIndex], fields[colIndex].Trim());
+                }
+
+                if (!string.IsNullOrEmpty(info.MemberId) || !string.IsNullOrEmpty(info.FirstName))
+                    patients.Add(info);
+            }
+
+            return patients;
+        }
+
         private PatientInfo ParsePatientSection(string sectionData)
         {
             var info = new PatientInfo();
@@ -95,6 +143,7 @@ namespace PatientEligibilityTranslator.EDI
             // Use profile if available
             string fieldDelimiter = Profile?.FieldDelimiter ?? ":";
             string lineDelimiter = Profile?.LineDelimiter ?? "\\n";
+            bool firstLineIsHeader = Profile?.FirstLineIsHeader ?? false;
             
             // Unescape delimiters
             fieldDelimiter = UnescapeString(fieldDelimiter);
@@ -102,48 +151,116 @@ namespace PatientEligibilityTranslator.EDI
             
             var lines = sectionData.Split(new[] { lineDelimiter }, StringSplitOptions.RemoveEmptyEntries);
 
-            foreach (var line in lines)
+            if (lines.Length == 0)
+                return info;
+
+            // If we have a header line, parse it to get column names
+            Dictionary<int, string> columnMappings = new Dictionary<int, string>();
+            int startLineIndex = 0;
+
+            if (firstLineIsHeader)
             {
-                var parts = line.Split(new[] { fieldDelimiter }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 2) continue;
-
-                string key = parts[0].Trim().ToLower();
-                string value = parts[1].Trim();
-
-                // Use field mappings from profile if available
-                string mappedKey = key;
-                if (Profile?.FieldMappings != null && Profile.FieldMappings.ContainsKey(key))
+                var headerLine = lines[0];
+                var headerFields = headerLine.Split(new[] { fieldDelimiter }, StringSplitOptions.None);
+                
+                // Create mapping from column index to field name
+                for (int i = 0; i < headerFields.Length; i++)
                 {
-                    mappedKey = Profile.FieldMappings[key];
+                    string headerFieldName = headerFields[i].Trim().ToLower();
+                    
+                    // Check if this header field has a mapping in the profile
+                    if (Profile?.FieldMappings != null && Profile.FieldMappings.ContainsKey(headerFieldName))
+                    {
+                        columnMappings[i] = Profile.FieldMappings[headerFieldName];
+                    }
+                    else
+                    {
+                        // Use the header field name directly as the property name
+                        columnMappings[i] = headerFieldName;
+                    }
                 }
+                
+                startLineIndex = 1;
+            }
 
-                switch (mappedKey)
+            // Parse data lines
+            for (int i = startLineIndex; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                
+                var fields = line.Split(new[] { fieldDelimiter }, StringSplitOptions.None);
+
+                // If we have column mappings (CSV with header), use them
+                if (columnMappings.Count > 0)
                 {
-                    case "FirstName":
-                        info.FirstName = value;
-                        break;
-                    case "LastName":
-                        info.LastName = value;
-                        break;
-                    case "DateOfBirth":
-                        info.DateOfBirth = value;
-                        break;
-                    case "MemberId":
-                        info.MemberId = value;
-                        break;
-                    case "GroupId":
-                        info.GroupId = value;
-                        break;
-                    case "PlanHolder":
-                        info.PlanHolder = value;
-                        break;
-                    case "Relationship":
-                        info.Relationship = value;
-                        break;
+                    for (int colIndex = 0; colIndex < fields.Length; colIndex++)
+                    {
+                        if (!columnMappings.ContainsKey(colIndex))
+                            continue;
+
+                        string propertyName = columnMappings[colIndex];
+                        string value = fields[colIndex].Trim();
+
+                        SetPatientProperty(ref info, propertyName, value);
+                    }
+                }
+                else
+                {
+                    // Key-value format: each field is "key:value"
+                    var parts = fields;
+                    if (parts.Length < 2) continue;
+
+                    string key = parts[0].Trim().ToLower();
+                    string value = parts[1].Trim();
+
+                    // Use field mappings from profile if available
+                    string mappedKey = key;
+                    if (Profile?.FieldMappings != null && Profile.FieldMappings.ContainsKey(key))
+                    {
+                        mappedKey = Profile.FieldMappings[key];
+                    }
+
+                    SetPatientProperty(ref info, mappedKey, value);
                 }
             }
 
             return info;
+        }
+
+        private void SetPatientProperty(ref PatientInfo info, string propertyName, string value)
+        {
+            switch (propertyName)
+            {
+                case "FirstName":
+                case "firstname":
+                    info.FirstName = value;
+                    break;
+                case "LastName":
+                case "lastname":
+                    info.LastName = value;
+                    break;
+                case "DateOfBirth":
+                case "dateofbirth":
+                    info.DateOfBirth = value;
+                    break;
+                case "MemberId":
+                case "memberid":
+                    info.MemberId = value;
+                    break;
+                case "GroupId":
+                case "groupid":
+                    info.GroupId = value;
+                    break;
+                case "PlanHolder":
+                case "planholder":
+                    info.PlanHolder = value;
+                    break;
+                case "Relationship":
+                case "relationship":
+                    info.Relationship = value;
+                    break;
+            }
         }
 
         private string UnescapeString(string value)

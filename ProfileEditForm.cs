@@ -160,6 +160,20 @@ namespace PatientEligibilityTranslator
             Close();
         }
 
+        private void BtnConfigureFieldMappings_Click(object sender, EventArgs e)
+        {
+            using (var mapper = new FieldMapperForm(_profile?.FieldMappings ?? new Dictionary<string, string>()))
+            {
+                if (mapper.ShowDialog(this) == DialogResult.OK)
+                {
+                    if (_profile != null)
+                    {
+                        _profile.FieldMappings = mapper.FieldMappings;
+                    }
+                }
+            }
+        }
+
         private void CbFieldDelimiter_SelectedIndexChanged(object sender, EventArgs e)
         {
             var selected = cbFieldDelimiter.SelectedItem?.ToString();

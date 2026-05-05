@@ -1,0 +1,11 @@
+FirstName,LastName,DateOfBirth,MemberId,GroupId,PlanHolder,Relationship
+John,Smith,1975-03-15,MEM001234,GRP05678,John Smith,Self
+Jane,Doe,1980-07-22,MEM001235,GRP05678,John Smith,Spouse
+Robert,Johnson,1985-11-08,MEM001236,GRP05679,Robert Johnson,Self
+Mary,Williams,1990-01-30,MEM001237,GRP05679,Robert Johnson,Spouse
+Michael,Brown,1978-05-12,MEM001238,GRP05680,Michael Brown,Self
+Patricia,Davis,1982-09-25,MEM001239,GRP05680,Michael Brown,Spouse
+David,Miller,1988-02-14,MEM001240,GRP05681,David Miller,Self
+Jennifer,Wilson,1992-06-03,MEM001241,GRP05681,David Miller,Spouse
+James,Moore,1979-12-19,MEM001242,GRP05682,James Moore,Self
+Linda,Taylor,1984-04-27,MEM001243,GRP05682,James Moore,Spouse

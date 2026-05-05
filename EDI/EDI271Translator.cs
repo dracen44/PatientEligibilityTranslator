@@ -17,9 +17,10 @@ namespace PatientEligibilityTranslator.EDI
 
             foreach (var segment in segmentLines)
             {
-                if (string.IsNullOrWhiteSpace(segment)) continue;
+                var trimmedSegment = segment.Trim();
+                if (string.IsNullOrWhiteSpace(trimmedSegment)) continue;
 
-                string[] parts = segment.Split('*');
+                string[] parts = trimmedSegment.Split('*');
                 if (parts.Length == 0) continue;
 
                 string segmentId = parts[0];
