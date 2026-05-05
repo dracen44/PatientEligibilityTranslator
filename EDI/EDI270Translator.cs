@@ -5,10 +5,10 @@ namespace PatientEligibilityTranslator.EDI
         private const string Separator = "~";
         private const string ElementSeparator = "*";
         private const string SegmentTerminator = "~";
-        private const string PatientDelimiter = "---PATIENT---";
 
         public bool SinglePatientPerRequest { get; set; } = false;
         public int MaxPatientsPerBatch { get; set; } = 50;
+        public FileFormatProfile? Profile { get; set; }
 
         public string Translate(string inputData)
         {
@@ -60,9 +60,21 @@ namespace PatientEligibilityTranslator.EDI
         private List<PatientInfo> ParseMultiplePatients(string inputData)
         {
             var patients = new List<PatientInfo>();
+            
+            // Use profile if available, otherwise use defaults
+            string patientDelimiter = Profile?.PatientDelimiter ?? "---PATIENT---";
+            
+            // If using line delimiter for patients, convert it first
+            if (Profile?.UseLineDelimiterForPatients == true)
+            {
+                patientDelimiter = Profile.LineDelimiter;
+            }
+
+            // Unescape the delimiter
+            patientDelimiter = UnescapeString(patientDelimiter);
 
             // Split by patient delimiter or by blank lines
-            string[] patientSections = inputData.Split(new[] { PatientDelimiter }, StringSplitOptions.None);
+            string[] patientSections = inputData.Split(new[] { patientDelimiter }, StringSplitOptions.None);
 
             foreach (var section in patientSections)
             {
@@ -78,45 +90,65 @@ namespace PatientEligibilityTranslator.EDI
 
         private PatientInfo ParsePatientSection(string sectionData)
         {
-            var lines = sectionData.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
             var info = new PatientInfo();
+            
+            // Use profile if available
+            string fieldDelimiter = Profile?.FieldDelimiter ?? ":";
+            string lineDelimiter = Profile?.LineDelimiter ?? "\\n";
+            
+            // Unescape delimiters
+            fieldDelimiter = UnescapeString(fieldDelimiter);
+            lineDelimiter = UnescapeString(lineDelimiter);
+            
+            var lines = sectionData.Split(new[] { lineDelimiter }, StringSplitOptions.RemoveEmptyEntries);
 
             foreach (var line in lines)
             {
-                var parts = line.Split(new[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
+                var parts = line.Split(new[] { fieldDelimiter }, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 2) continue;
 
                 string key = parts[0].Trim().ToLower();
                 string value = parts[1].Trim();
 
-                switch (key)
+                // Use field mappings from profile if available
+                string mappedKey = key;
+                if (Profile?.FieldMappings != null && Profile.FieldMappings.ContainsKey(key))
                 {
-                    case "firstname":
+                    mappedKey = Profile.FieldMappings[key];
+                }
+
+                switch (mappedKey)
+                {
+                    case "FirstName":
                         info.FirstName = value;
                         break;
-                    case "lastname":
+                    case "LastName":
                         info.LastName = value;
                         break;
-                    case "dob":
-                    case "dateofbirth":
+                    case "DateOfBirth":
                         info.DateOfBirth = value;
                         break;
-                    case "memberid":
+                    case "MemberId":
                         info.MemberId = value;
                         break;
-                    case "groupid":
+                    case "GroupId":
                         info.GroupId = value;
                         break;
-                    case "planholder":
+                    case "PlanHolder":
                         info.PlanHolder = value;
                         break;
-                    case "relationship":
+                    case "Relationship":
                         info.Relationship = value;
                         break;
                 }
             }
 
             return info;
+        }
+
+        private string UnescapeString(string value)
+        {
+            return value.Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\r", "\r");
         }
 
         private string BuildEDI270Batch(List<PatientInfo> patients, int interchangeNumber = 1)

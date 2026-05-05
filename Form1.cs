@@ -25,7 +25,8 @@ namespace PatientEligibilityTranslator
             _edi270Translator = new EDI270Translator
             {
                 SinglePatientPerRequest = _appSettings.SinglePatientPerRequest,
-                MaxPatientsPerBatch = _appSettings.MaxPatientsPerBatch
+                MaxPatientsPerBatch = _appSettings.MaxPatientsPerBatch,
+                Profile = _appSettings.GetActiveProfile()
             };
         }
 
@@ -33,6 +34,7 @@ namespace PatientEligibilityTranslator
         {
             _edi270Translator.SinglePatientPerRequest = _appSettings.SinglePatientPerRequest;
             _edi270Translator.MaxPatientsPerBatch = _appSettings.MaxPatientsPerBatch;
+            _edi270Translator.Profile = _appSettings.GetActiveProfile();
         }
 
         private void BtnSelectFile_Click(object sender, EventArgs e)
@@ -100,12 +102,18 @@ namespace PatientEligibilityTranslator
 
         private void BtnSettings_Click(object sender, EventArgs e)
         {
-            using (var settingsForm = new SettingsForm(_appSettings.SinglePatientPerRequest, _appSettings.MaxPatientsPerBatch))
+            using (var settingsForm = new SettingsForm(
+                _appSettings.SinglePatientPerRequest, 
+                _appSettings.MaxPatientsPerBatch,
+                _appSettings.Profiles,
+                _appSettings.ActiveProfileName))
             {
                 if (settingsForm.ShowDialog(this) == DialogResult.OK)
                 {
                     _appSettings.SinglePatientPerRequest = settingsForm.SinglePatientPerRequest;
                     _appSettings.MaxPatientsPerBatch = settingsForm.MaxPatientsPerBatch;
+                    _appSettings.Profiles = settingsForm.Profiles;
+                    _appSettings.ActiveProfileName = settingsForm.ActiveProfileName;
                     _appSettings.Save();
                     UpdateTranslatorSettings();
                     MessageBox.Show("Settings saved successfully.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
